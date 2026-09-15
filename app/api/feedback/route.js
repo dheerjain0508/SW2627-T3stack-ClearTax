@@ -91,17 +91,15 @@ export async function POST(request) {
       );
     }
 
-    const { data, error } = await supabase
-      .from("feedback")
-      .insert([
-        {
-          name,
-          email,
-          message,
-        },
-      ])
-      .select()
-      .single();
+    const { error } = await supabase
+  .from("feedback")
+  .insert([
+    {
+      name,
+      email,
+      message,
+    },
+  ]);
 
     if (error) {
       console.error("Feedback insert error:", error);
@@ -116,10 +114,9 @@ export async function POST(request) {
     }
 
     return NextResponse.json({
-      success: true,
-      message: "Feedback submitted successfully.",
-      data,
-    });
+  success: true,
+  message: "Feedback submitted successfully.",
+});
   } catch (error) {
     console.error("Feedback API error:", error);
 
