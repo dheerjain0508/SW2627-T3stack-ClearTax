@@ -8,6 +8,7 @@ import {
   Eye,
   FileText,
   History,
+  MessageSquare,
   LogOut,
   UploadCloud,
   User as UserIcon,
@@ -359,7 +360,8 @@ export default function DashboardPage() {
   const startIndex = (safePage - 1) * ITEMS_PER_PAGE;
   const endIndex = startIndex + ITEMS_PER_PAGE;
   const currentInvoices = invoices.slice(startIndex, endIndex);
-
+  const ADMIN_EMAILS = ["dheer@gmail.com","prateek@gmail.com","himesh@gmail.com",];
+  const isAdmin =!!user?.email && ADMIN_EMAILS.includes(user.email.trim().toLowerCase());
   const fetchInvoices = useCallback(async (userId: string) => {
     setIsLoadingInvoices(true);
 
@@ -680,7 +682,27 @@ export default function DashboardPage() {
               <History size={16} />
               History
             </button>
-
+              {isAdmin && (
+  <button
+    type="button"
+    onClick={() => router.push("/feedback")}
+    style={{
+      display: "flex",
+      alignItems: "center",
+      gap: "0.45rem",
+      background: "#ede5da",
+      color: "var(--primary)",
+      border: "1px solid var(--border)",
+      padding: "0.6rem 0.95rem",
+      borderRadius: "0.6rem",
+      fontWeight: 700,
+      cursor: "pointer",
+    }}
+  >
+    <MessageSquare size={16} />
+    Feedback
+  </button>
+)}
             <button
               type="button"
               onClick={handleLogout}
