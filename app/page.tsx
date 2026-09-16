@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React from "react";
 import { motion } from "framer-motion";
 import {
   ArrowRight,
@@ -11,16 +11,10 @@ import {
   CheckCircle2,
   BarChart3,
   Clock,
-  MessageSquare,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 export default function LandingPage() {
-  const [feedbackName, setFeedbackName] = useState("");
-  const [feedbackEmail, setFeedbackEmail] = useState("");
-  const [feedbackMessage, setFeedbackMessage] = useState("");
-  const [feedbackLoading, setFeedbackLoading] = useState(false);
-  const [feedbackStatus, setFeedbackStatus] = useState("");
   const router = useRouter();
 
   const containerVariants = {
@@ -39,63 +33,162 @@ export default function LandingPage() {
       transition: { duration: 0.6 },
     },
   };
-    const handleFeedbackSubmit = async (
-    event: React.FormEvent<HTMLFormElement>
-  ) => {
-    event.preventDefault();
-
-    if (!feedbackMessage.trim()) {
-      setFeedbackStatus("Please enter your concern.");
-      return;
-    }
-
-    try {
-      setFeedbackLoading(true);
-      setFeedbackStatus("");
-
-      const response = await fetch("/api/feedback", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          name: feedbackName,
-          email: feedbackEmail,
-          message: feedbackMessage,
-        }),
-      });
-
-      const result = await response.json();
-
-      if (!response.ok || !result.success) {
-        throw new Error(result.message || "Failed to submit feedback.");
-      }
-
-      setFeedbackName("");
-      setFeedbackEmail("");
-      setFeedbackMessage("");
-      setFeedbackStatus("Thank you! Your feedback has been submitted.");
-    } catch (error) {
-      console.error("Feedback submission error:", error);
-
-      setFeedbackStatus(
-        error instanceof Error
-          ? error.message
-          : "Failed to submit feedback."
-      );
-    } finally {
-      setFeedbackLoading(false);
-    }
-  };
-  return (
+    return (
     <main
       className="container"
       style={{
         display: "block",
         minHeight: "100vh",
-        padding: "3rem 1.5rem",
+        padding: "1.25rem 1.5rem 3rem",
       }}
     >
+      {/* NAVBAR */}
+      <motion.nav
+        initial={{ opacity: 0, y: -12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.45 }}
+        style={{
+          position: "sticky",
+          top: "1rem",
+          zIndex: 50,
+          maxWidth: "1100px",
+          margin: "0 auto 2rem",
+          padding: "0.8rem 1rem",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: "1rem",
+          flexWrap: "wrap",
+          background: "rgba(253, 251, 247, 0.92)",
+          backdropFilter: "blur(12px)",
+          WebkitBackdropFilter: "blur(12px)",
+          border: "1px solid var(--border)",
+          borderRadius: "1rem",
+          boxShadow: "0 8px 24px rgba(63, 53, 44, 0.08)",
+        }}
+      >
+        <button
+          type="button"
+          onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: "0.65rem",
+            border: "none",
+            background: "transparent",
+            color: "#3f352c",
+            fontWeight: 800,
+            fontSize: "1.05rem",
+            cursor: "pointer",
+            padding: "0.25rem",
+          }}
+          aria-label="Go to top"
+        >
+          <span
+            style={{
+              width: "34px",
+              height: "34px",
+              borderRadius: "0.65rem",
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+              background: "#ede5da",
+              color: "var(--primary)",
+            }}
+          >
+            <Database size={18} />
+          </span>
+          ClearTax
+        </button>
+
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: "0.35rem",
+            flex: "1 1 auto",
+          }}
+        >
+          <a
+            href="#features"
+            style={{
+              padding: "0.55rem 0.75rem",
+              borderRadius: "0.55rem",
+              color: "#6a5c4f",
+              textDecoration: "none",
+              fontSize: "0.86rem",
+              fontWeight: 600,
+            }}
+          >
+            Features
+          </a>
+
+          <a
+            href="#why-cleartax"
+            style={{
+              padding: "0.55rem 0.75rem",
+              borderRadius: "0.55rem",
+              color: "#6a5c4f",
+              textDecoration: "none",
+              fontSize: "0.86rem",
+              fontWeight: 600,
+            }}
+          >
+            Why ClearTax
+          </a>
+
+          <a
+            href="#how-it-works"
+            style={{
+              padding: "0.55rem 0.75rem",
+              borderRadius: "0.55rem",
+              color: "#6a5c4f",
+              textDecoration: "none",
+              fontSize: "0.86rem",
+              fontWeight: 600,
+            }}
+          >
+            How It Works
+          </a>
+        </div>
+
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "0.55rem",
+          }}
+        >
+          <button
+            type="button"
+            onClick={() => router.push("/login")}
+            style={{
+              padding: "0.6rem 0.9rem",
+              borderRadius: "0.6rem",
+              border: "1px solid var(--border)",
+              background: "#fff",
+              color: "var(--primary)",
+              fontWeight: 700,
+              cursor: "pointer",
+            }}
+          >
+            Sign In
+          </button>
+
+          <button
+            type="button"
+            onClick={() => router.push("/signup")}
+            className="btn-primary"
+            style={{
+              padding: "0.62rem 0.95rem",
+              whiteSpace: "nowrap",
+            }}
+          >
+            Sign Up
+          </button>
+        </div>
+      </motion.nav>
       {/* HERO SECTION */}
       <motion.section
         className="card"
@@ -252,6 +345,7 @@ export default function LandingPage() {
 
       {/* FEATURES SECTION */}
       <motion.section
+        id="features"
         variants={containerVariants}
         initial="hidden"
         whileInView="show"
@@ -260,6 +354,7 @@ export default function LandingPage() {
           maxWidth: "1000px",
           margin: "5rem auto",
           textAlign: "center",
+          scrollMarginTop: "100px",
         }}
       >
         <motion.h2
@@ -322,6 +417,7 @@ export default function LandingPage() {
 
       {/* WHY CLEARTAX */}
       <motion.section
+        id="why-cleartax"
         variants={containerVariants}
         initial="hidden"
         whileInView="show"
@@ -330,6 +426,7 @@ export default function LandingPage() {
           maxWidth: "1000px",
           margin: "5rem auto",
           textAlign: "center",
+          scrollMarginTop: "100px",
         }}
       >
         <motion.h2
@@ -395,6 +492,7 @@ export default function LandingPage() {
 
       {/* HOW IT WORKS */}
       <motion.section
+        id="how-it-works"
         variants={containerVariants}
         initial="hidden"
         whileInView="show"
@@ -403,6 +501,7 @@ export default function LandingPage() {
           maxWidth: "1000px",
           margin: "5rem auto",
           textAlign: "center",
+          scrollMarginTop: "100px",
         }}
       >
         <motion.h2
@@ -460,139 +559,6 @@ export default function LandingPage() {
           />
         </div>
       </motion.section>
-          {/* FEEDBACK SECTION */}
-<motion.section
-  variants={containerVariants}
-  initial="hidden"
-  whileInView="show"
-  viewport={{ once: true }}
-  style={{
-    maxWidth: "900px",
-    margin: "5rem auto",
-    padding: "3rem 2rem",
-    textAlign: "center",
-    borderRadius: "24px",
-    background: "rgba(255, 255, 255, 0.55)",
-    border: "1px solid rgba(139, 121, 104, 0.15)",
-  }}
->
-  <motion.div variants={itemVariants}>
-    <MessageSquare
-      size={38}
-      style={{
-        color: "var(--primary)",
-        marginBottom: "1rem",
-      }}
-    />
-
-    <h2
-      style={{
-        fontSize: "2.3rem",
-        color: "#5f554b",
-        marginBottom: "0.75rem",
-      }}
-    >
-      Have a Concern?
-    </h2>
-
-    <p
-      style={{
-        color: "#927f6a",
-        fontSize: "1.05rem",
-        marginBottom: "2rem",
-      }}
-    >
-      Tell us what could be improved or share your experience with ClearTax.
-    </p>
-
-    <form
-      onSubmit={handleFeedbackSubmit}
-      style={{
-        display: "grid",
-        gap: "1rem",
-        maxWidth: "650px",
-        margin: "0 auto",
-        textAlign: "left",
-      }}
-    >
-      <input
-        type="text"
-        placeholder="Your name"
-        value={feedbackName}
-        onChange={(event) => setFeedbackName(event.target.value)}
-        style={{
-          width: "100%",
-          padding: "0.9rem 1rem",
-          borderRadius: "0.7rem",
-          border: "1px solid var(--border)",
-          background: "#fff",
-          color: "#3f352c",
-          boxSizing: "border-box",
-        }}
-      />
-
-      <input
-        type="email"
-        placeholder="Your email"
-        value={feedbackEmail}
-        onChange={(event) => setFeedbackEmail(event.target.value)}
-        style={{
-          width: "100%",
-          padding: "0.9rem 1rem",
-          borderRadius: "0.7rem",
-          border: "1px solid var(--border)",
-          background: "#fff",
-          color: "#3f352c",
-          boxSizing: "border-box",
-        }}
-      />
-
-      <textarea
-        placeholder="Tell us your concern..."
-        value={feedbackMessage}
-        onChange={(event) => setFeedbackMessage(event.target.value)}
-        rows={5}
-        style={{
-          width: "100%",
-          padding: "0.9rem 1rem",
-          borderRadius: "0.7rem",
-          border: "1px solid var(--border)",
-          background: "#fff",
-          color: "#3f352c",
-          resize: "vertical",
-          boxSizing: "border-box",
-          fontFamily: "inherit",
-        }}
-      />
-
-      <button
-        type="submit"
-        className="btn-primary"
-        disabled={feedbackLoading}
-        style={{
-          justifyContent: "center",
-          padding: "0.9rem 1.5rem",
-          opacity: feedbackLoading ? 0.7 : 1,
-        }}
-      >
-        {feedbackLoading ? "Submitting..." : "Submit Feedback"}
-      </button>
-
-      {feedbackStatus && (
-        <p
-          style={{
-            margin: 0,
-            textAlign: "center",
-            color: "var(--primary)",
-            fontWeight: 600,
-          }}
-        >
-          {feedbackStatus}
-        </p>
-      )}
-    </form>
-  </motion.div>
-</motion.section>
       {/* FINAL CTA */}
       <motion.section
         variants={itemVariants}

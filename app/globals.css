@@ -137,7 +137,7 @@ select:focus {
 .upload-zone {
   border: 2px dashed rgba(139, 121, 104, 0.38);
   border-radius: var(--radius);
-  padding: 4rem 2rem;
+  padding: 2rem 1.25rem;
   text-align: center;
   cursor: pointer;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
@@ -145,7 +145,7 @@ select:focus {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 1.5rem;
+  gap: 0.65rem;
   position: relative;
   overflow: hidden;
 }
@@ -159,9 +159,9 @@ select:focus {
 
 .upload-icon {
   color: var(--primary);
-  width: 56px;
-  height: 56px;
-  margin-bottom: 0.5rem;
+  width: 46px;
+  height: 46px;
+  margin-bottom: 0.25rem;
   animation: float 4s ease-in-out infinite;
 }
 

@@ -3,6 +3,7 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   AlertTriangle,
+  BarChart3,
   CheckCircle2,
   Clock3,
   Eye,
@@ -103,7 +104,9 @@ function normalizeInvoice(raw: any): InvoiceRecord {
     invoiceNumber: String(raw?.invoiceNumber ?? raw?.invoice_number ?? ""),
     invoiceDate: String(raw?.invoiceDate ?? raw?.invoice_date ?? ""),
     dueDate: raw?.dueDate ?? raw?.due_date ?? null,
-    contact: String(raw?.contact ?? raw?.customerName ?? raw?.customer_name ?? ""),
+    contact: String(
+      raw?.contact ?? raw?.customerName ?? raw?.customer_name ?? ""
+    ),
     customerName: String(
       raw?.customerName ?? raw?.customer_name ?? raw?.contact ?? ""
     ),
@@ -296,30 +299,42 @@ export default function DashboardPage() {
   const [historyInvoices, setHistoryInvoices] = useState<InvoiceRecord[]>([]);
   const [isLoadingInvoices, setIsLoadingInvoices] = useState(true);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+  const [isAnalyticsOpen, setIsAnalyticsOpen] = useState(false);
   const [selectedInvoice, setSelectedInvoice] =
     useState<InvoiceRecord | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
+  const [feedbackName, setFeedbackName] = useState("");
+  const [feedbackMessage, setFeedbackMessage] = useState("");
+  const [feedbackLoading, setFeedbackLoading] = useState(false);
+  const [feedbackStatus, setFeedbackStatus] = useState("");
+  const [isFeedbackOpen, setIsFeedbackOpen] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const ITEMS_PER_PAGE = 15;
 
   const totalInvoices = invoices.length;
+
   const matchedInvoices = invoices.filter(
     (invoice) => invoice.paymentStatus === "matched"
   ).length;
+
   const partiallyPaidInvoices = invoices.filter(
     (invoice) => invoice.paymentStatus === "partially_paid"
   ).length;
+
   const unpaidInvoices = invoices.filter(
     (invoice) => invoice.paymentStatus === "unpaid"
   ).length;
+
   const overpaidInvoices = invoices.filter(
     (invoice) => invoice.paymentStatus === "overpaid"
   ).length;
+
   const failedInvoices = invoices.filter(
     (invoice) => invoice.paymentStatus === "failed"
   ).length;
+
   const overdueInvoices = invoices.filter(
     (invoice) => invoice.timingStatus === "overdue"
   ).length;
@@ -328,23 +343,27 @@ export default function DashboardPage() {
     (sum, invoice) => sum + (invoice.amount ?? 0),
     0
   );
+
   const totalTax = invoices.reduce(
     (sum, invoice) => sum + (invoice.tax ?? 0),
     0
   );
+
   const totalPayable = invoices.reduce(
     (sum, invoice) => sum + (invoice.totalAmount ?? 0),
     0
   );
+
   const totalPaid = invoices.reduce(
     (sum, invoice) => sum + (invoice.paidAmount ?? 0),
     0
   );
+
   const outstanding = invoices.reduce(
-    (sum, invoice) =>
-      sum + Math.max(invoice.amountDue ?? 0, 0),
+    (sum, invoice) => sum + Math.max(invoice.amountDue ?? 0, 0),
     0
   );
+
   const totalOverpaid = invoices.reduce(
     (sum, invoice) =>
       sum +
@@ -355,13 +374,26 @@ export default function DashboardPage() {
     0
   );
 
-  const totalPages = Math.max(1, Math.ceil(totalInvoices / ITEMS_PER_PAGE));
+  const totalPages = Math.max(
+    1,
+    Math.ceil(totalInvoices / ITEMS_PER_PAGE)
+  );
+
   const safePage = Math.min(currentPage, totalPages);
   const startIndex = (safePage - 1) * ITEMS_PER_PAGE;
   const endIndex = startIndex + ITEMS_PER_PAGE;
   const currentInvoices = invoices.slice(startIndex, endIndex);
-  const ADMIN_EMAILS = ["dheer@gmail.com","prateek@gmail.com","himesh@gmail.com",];
-  const isAdmin =!!user?.email && ADMIN_EMAILS.includes(user.email.trim().toLowerCase());
+
+  const ADMIN_EMAILS = [
+    "dheer@gmail.com",
+    "prateek@gmail.com",
+    "himesh@gmail.com",
+  ];
+
+  const isAdmin =
+    !!user?.email &&
+    ADMIN_EMAILS.includes(user.email.trim().toLowerCase());
+
   const fetchInvoices = useCallback(async (userId: string) => {
     setIsLoadingInvoices(true);
 
@@ -378,7 +410,9 @@ export default function DashboardPage() {
       const result = await response.json();
 
       if (!response.ok || !result.success) {
-        throw new Error(result.message || "Failed to fetch invoices");
+        throw new Error(
+          result.message || "Failed to fetch invoices"
+        );
       }
 
       setInvoices(
@@ -386,11 +420,13 @@ export default function DashboardPage() {
           ? result.data.map(normalizeInvoice)
           : []
       );
+
       setHistoryInvoices(
-  Array.isArray(result.data)
-    ? result.data.map(normalizeInvoice)
-    : []
-);
+        Array.isArray(result.data)
+          ? result.data.map(normalizeInvoice)
+          : []
+      );
+
       setCurrentPage(1);
     } catch (error) {
       console.error("Failed to fetch invoices:", error);
@@ -425,6 +461,54 @@ export default function DashboardPage() {
     router.push("/login");
   };
 
+  const handleFeedbackSubmit = async (
+    event: React.FormEvent<HTMLFormElement>
+  ) => {
+    event.preventDefault();
+
+    if (!feedbackMessage.trim()) {
+      setFeedbackStatus("Please enter your concern.");
+      return;
+    }
+
+    try {
+      setFeedbackLoading(true);
+      setFeedbackStatus("");
+
+      const response = await fetch("/api/feedback", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          name: feedbackName || user?.name || "",
+          email: user?.email || "",
+          message: feedbackMessage,
+        }),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok || !result.success) {
+        throw new Error(result.message || "Failed to submit feedback.");
+      }
+
+      setFeedbackName("");
+      setFeedbackMessage("");
+      setFeedbackStatus("Thank you! Your feedback has been submitted.");
+    } catch (error) {
+      console.error("Feedback submission error:", error);
+
+      setFeedbackStatus(
+        error instanceof Error
+          ? error.message
+          : "Failed to submit feedback."
+      );
+    } finally {
+      setFeedbackLoading(false);
+    }
+  };
+
   const handleDragOver = (event: React.DragEvent) => {
     event.preventDefault();
     setIsDragging(true);
@@ -444,18 +528,32 @@ export default function DashboardPage() {
     }
   };
 
-  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = (
+    event: React.ChangeEvent<HTMLInputElement>
+  ) => {
     if (event.target.files?.length) {
       handleFile(event.target.files[0]);
     }
   };
 
   const handleFile = (selectedFile: File) => {
-    if (
-      selectedFile.type !== "text/csv" &&
-      !selectedFile.name.toLowerCase().endsWith(".csv")
-    ) {
-      alert("Please upload a valid CSV file.");
+    const fileName = selectedFile.name.toLowerCase();
+
+    const supportedExtensions = [
+      ".csv",
+      ".pdf",
+      ".xlsx",
+      ".docx",
+    ];
+
+    const isSupported = supportedExtensions.some((extension) =>
+      fileName.endsWith(extension)
+    );
+
+    if (!isSupported) {
+      alert(
+        "Please upload a supported file: .csv, .pdf, .xlsx, or .docx"
+      );
       return;
     }
 
@@ -473,33 +571,45 @@ export default function DashboardPage() {
       const formData = new FormData();
       formData.append("file", file);
 
-      const response = await fetch("/api/invoices/process", {
-        method: "POST",
-        headers: {
-          "x-user-id": user.id,
-        },
-        body: formData,
-      });
+      const response = await fetch(
+        "/api/invoices/process",
+        {
+          method: "POST",
+          headers: {
+            "x-user-id": user.id,
+          },
+          body: formData,
+        }
+      );
 
       setProgress(75);
 
       const text = await response.text();
 
       if (!text) {
-        throw new Error("Server returned an empty response");
+        throw new Error(
+          "Server returned an empty response"
+        );
       }
 
       const result = JSON.parse(text);
 
       if (!response.ok || !result.success) {
-        throw new Error(result.message || "Failed to process invoices");
+        throw new Error(
+          result.message ||
+            "Failed to process invoices"
+        );
       }
 
       if (Array.isArray(result.data)) {
-        setInvoices(result.data.map(normalizeInvoice));
+        setInvoices(
+          result.data.map(normalizeInvoice)
+        );
+
         setHistoryInvoices(
-  result.data.map(normalizeInvoice)
-);
+          result.data.map(normalizeInvoice)
+        );
+
         setCurrentPage(1);
       }
 
@@ -522,16 +632,23 @@ export default function DashboardPage() {
     hidden: { opacity: 0 },
     show: {
       opacity: 1,
-      transition: { staggerChildren: 0.08 },
+      transition: {
+        staggerChildren: 0.08,
+      },
     },
   };
 
   const itemVariants: import("framer-motion").Variants = {
-    hidden: { opacity: 0, y: 16 },
+    hidden: {
+      opacity: 0,
+      y: 16,
+    },
     show: {
       opacity: 1,
       y: 0,
-      transition: { duration: 0.35 },
+      transition: {
+        duration: 0.35,
+      },
     },
   };
 
@@ -545,9 +662,9 @@ export default function DashboardPage() {
       style={{
         background: "#ffffff",
         border: "1px solid var(--border)",
-        borderRadius: "0.85rem",
-        padding: "1rem",
-        minHeight: "105px",
+        borderRadius: "0.75rem",
+        padding: "0.8rem",
+        minHeight: "86px",
         display: "flex",
         flexDirection: "column",
         justifyContent: "space-between",
@@ -570,13 +687,16 @@ export default function DashboardPage() {
         >
           {label}
         </span>
-        <span style={{ color: accent }}>{icon}</span>
+
+        <span style={{ color: accent }}>
+          {icon}
+        </span>
       </div>
 
       <div
         style={{
-          marginTop: "0.5rem",
-          fontSize: "1.8rem",
+          marginTop: "0.35rem",
+          fontSize: "1.55rem",
           fontWeight: 800,
           color: "#3f352c",
         }}
@@ -645,6 +765,7 @@ export default function DashboardPage() {
               >
                 {user?.name || "Account"}
               </div>
+
               <div
                 style={{
                   fontSize: "0.8rem",
@@ -682,27 +803,51 @@ export default function DashboardPage() {
               <History size={16} />
               History
             </button>
-              {isAdmin && (
-  <button
-    type="button"
-    onClick={() => router.push("/feedback")}
-    style={{
-      display: "flex",
-      alignItems: "center",
-      gap: "0.45rem",
-      background: "#ede5da",
-      color: "var(--primary)",
-      border: "1px solid var(--border)",
-      padding: "0.6rem 0.95rem",
-      borderRadius: "0.6rem",
-      fontWeight: 700,
-      cursor: "pointer",
-    }}
-  >
-    <MessageSquare size={16} />
-    Feedback
-  </button>
-)}
+
+            <button
+              type="button"
+              onClick={() => setIsAnalyticsOpen(true)}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "0.45rem",
+                background: "#ede5da",
+                color: "var(--primary)",
+                border: "1px solid var(--border)",
+                padding: "0.6rem 0.95rem",
+                borderRadius: "0.6rem",
+                fontWeight: 700,
+                cursor: "pointer",
+              }}
+            >
+              <BarChart3 size={16} />
+              Analytics
+            </button>
+
+            {isAdmin && (
+              <button
+                type="button"
+                onClick={() =>
+                  router.push("/feedback")
+                }
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "0.45rem",
+                  background: "#ede5da",
+                  color: "var(--primary)",
+                  border: "1px solid var(--border)",
+                  padding: "0.6rem 0.95rem",
+                  borderRadius: "0.6rem",
+                  fontWeight: 700,
+                  cursor: "pointer",
+                }}
+              >
+                <MessageSquare size={16} />
+                Feedback
+              </button>
+            )}
+
             <button
               type="button"
               onClick={handleLogout}
@@ -750,169 +895,21 @@ export default function DashboardPage() {
           <motion.p
             variants={itemVariants}
             className="subtitle"
-            style={{ marginBottom: "1.5rem" }}
+            style={{
+              marginBottom: "1.5rem",
+            }}
           >
-            Upload a controlled CSV, process invoices in bulk, and review
-            payment reconciliation and timing status from one dashboard.
+            Upload invoice files in multiple formats,
+            process them with AI-assisted normalization,
+            and review payment reconciliation and timing
+            status from one dashboard.
           </motion.p>
-
-          <motion.div variants={itemVariants}>
-            <div
-              style={{
-                background: "#faf8f4",
-                border: "1px solid var(--border)",
-                borderRadius: "1rem",
-                padding: "1.25rem",
-              }}
-            >
-              <div
-                style={{
-                  marginBottom: "1rem",
-                  fontWeight: 800,
-                  color: "#3f352c",
-                }}
-              >
-                Reconciliation Summary
-              </div>
-
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
-                  gap: "0.9rem",
-                }}
-              >
-                {summaryCard(
-                  "Total Invoices",
-                  totalInvoices,
-                  <FileText size={18} />
-                )}
-                {summaryCard(
-                  "Matched",
-                  matchedInvoices,
-                  <CheckCircle2 size={18} />,
-                  "#16a34a"
-                )}
-                {summaryCard(
-                  "Partially Paid",
-                  partiallyPaidInvoices,
-                  <Clock3 size={18} />,
-                  "#d97706"
-                )}
-                {summaryCard(
-                  "Unpaid",
-                  unpaidInvoices,
-                  <AlertTriangle size={18} />,
-                  "#6b7280"
-                )}
-              </div>
-
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
-                  gap: "0.9rem",
-                  maxWidth: "75%",
-                  margin: "0.9rem auto 0",
-                }}
-              >
-                {summaryCard(
-                  "Overpaid",
-                  overpaidInvoices,
-                  <CheckCircle2 size={18} />,
-                  "#7c3aed"
-                )}
-                {summaryCard(
-                  "Failed",
-                  failedInvoices,
-                  <XCircle size={18} />,
-                  "#dc2626"
-                )}
-                {summaryCard(
-                  "Overdue",
-                  overdueInvoices,
-                  <Clock3 size={18} />,
-                  "#dc2626"
-                )}
-              </div>
-            </div>
-
-            <div
-              style={{
-                marginTop: "1.25rem",
-                background: "#f7f3ed",
-                border: "1px solid var(--border)",
-                borderRadius: "1rem",
-                padding: "1.25rem",
-              }}
-            >
-              <div
-                style={{
-                  marginBottom: "1rem",
-                  fontWeight: 800,
-                  color: "#3f352c",
-                }}
-              >
-                Financial Overview
-              </div>
-
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
-                  gap: "0.9rem",
-                }}
-              >
-                {summaryCard(
-                  "Invoice Value",
-                  formatMoney(invoiceValue),
-                  <FileText size={18} />
-                )}
-                {summaryCard(
-                  "Total Tax",
-                  formatMoney(totalTax),
-                  <FileText size={18} />
-                )}
-                {summaryCard(
-                  "Total Payable",
-                  formatMoney(totalPayable),
-                  <FileText size={18} />
-                )}
-              </div>
-
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
-                  gap: "0.9rem",
-                  marginTop: "0.9rem",
-                }}
-              >
-                {summaryCard(
-                  "Total Paid",
-                  formatMoney(totalPaid),
-                  <CheckCircle2 size={18} />,
-                  "#16a34a"
-                )}
-                {summaryCard(
-                  "Outstanding",
-                  formatMoney(outstanding),
-                  <AlertTriangle size={18} />,
-                  "#d97706"
-                )}
-                {summaryCard(
-                  "Overpaid",
-                  formatMoney(totalOverpaid),
-                  <CheckCircle2 size={18} />,
-                  "#7c3aed"
-                )}
-              </div>
-            </div>
-          </motion.div>
 
           <motion.div
             variants={itemVariants}
-            style={{ marginTop: "1.5rem" }}
+            style={{
+              marginTop: "1.5rem",
+            }}
           >
             <div
               className={`upload-zone ${
@@ -921,18 +918,20 @@ export default function DashboardPage() {
               onDragOver={handleDragOver}
               onDragLeave={handleDragLeave}
               onDrop={handleDrop}
-              onClick={() => fileInputRef.current?.click()}
+              onClick={() =>
+                fileInputRef.current?.click()
+              }
               style={{
-                minHeight: "190px",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-              }}
+                      minHeight: "135px",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      }}
             >
               <input
                 ref={fileInputRef}
                 type="file"
-                accept=".csv"
+                accept=".csv,.pdf,.xlsx,.docx"
                 onChange={handleFileChange}
                 style={{ display: "none" }}
               />
@@ -949,18 +948,37 @@ export default function DashboardPage() {
                 >
                   <FileText
                     className="upload-icon"
-                    style={{ marginBottom: "0.5rem" }}
+                    style={{
+                      marginBottom: "0.5rem",
+                    }}
                   />
 
-                  <h3 style={{ marginBottom: "0.25rem" }}>
+                  <h3
+                    style={{
+                      marginBottom: "0.25rem",
+                    }}
+                  >
                     {file.name}
                   </h3>
 
                   <p
                     className="subtitle"
-                    style={{ marginBottom: 0 }}
+                    style={{
+                      marginBottom: 0,
+                    }}
                   >
                     {(file.size / 1024).toFixed(2)} KB
+                  </p>
+
+                  <p
+                    style={{
+                      margin: "0.55rem 0 0",
+                      fontSize: "0.78rem",
+                      color:
+                        "var(--muted-foreground)",
+                    }}
+                  >
+                    Supported: .csv, .pdf, .xlsx, .docx
                   </p>
 
                   <button
@@ -971,11 +989,13 @@ export default function DashboardPage() {
                       event.stopPropagation();
                       startProcessing();
                     }}
-                    style={{ marginTop: "1.25rem" }}
+                    style={{
+                      marginTop: "1.25rem",
+                    }}
                   >
                     {isProcessing
                       ? "Processing..."
-                      : "Process CSV Now"}
+                      : "Process File"}
                   </button>
                 </div>
               ) : (
@@ -990,13 +1010,48 @@ export default function DashboardPage() {
                 >
                   <UploadCloud
                     className="upload-icon"
-                    style={{ marginBottom: "0.5rem" }}
+                    style={{
+                      marginBottom: "0.5rem",
+                    }}
                   />
-                  <h3 style={{ marginBottom: "0.35rem" }}>
-                    Drag & Drop your CSV here
+
+                  <h3
+                    style={{
+                      marginBottom: "0.35rem",
+                    }}
+                  >
+                    Drag & Drop your invoice file here
                   </h3>
+
                   <p style={{ margin: 0 }}>
                     or click to browse files from your computer
+                  </p>
+
+                  <p
+                    style={{
+                      margin: "0.7rem 0 0",
+                      fontSize: "0.78rem",
+                      color:
+                        "var(--muted-foreground)",
+                    }}
+                  >
+                    Supported: .csv, .pdf, .xlsx, .docx
+                  </p>
+
+                  <p
+                    style={{
+                      margin: "0.35rem 0 0",
+                      fontSize: "0.75rem",
+                      color:
+                        "var(--muted-foreground)",
+                      lineHeight: 1.5,
+                      maxWidth: "720px",
+                    }}
+                  >
+                    CSV format: invoiceNumber,
+                    invoiceDate, dueDate, contact,
+                    currency, amount, tax, paidAmount,
+                    paidDate
                   </p>
                 </div>
               )}
@@ -1006,11 +1061,22 @@ export default function DashboardPage() {
           <AnimatePresence>
             {(isProcessing || progress > 0) && (
               <motion.div
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: "auto" }}
-                exit={{ opacity: 0, height: 0 }}
+                initial={{
+                  opacity: 0,
+                  height: 0,
+                }}
+                animate={{
+                  opacity: 1,
+                  height: "auto",
+                }}
+                exit={{
+                  opacity: 0,
+                  height: 0,
+                }}
                 className="progress-container"
-                style={{ marginTop: "1rem" }}
+                style={{
+                  marginTop: "1rem",
+                }}
               >
                 <div className="progress-header">
                   <span>
@@ -1018,13 +1084,16 @@ export default function DashboardPage() {
                       ? "Processing Invoices..."
                       : "Processing Complete"}
                   </span>
+
                   <span>{progress}%</span>
                 </div>
 
                 <div className="progress-bar-bg">
                   <div
                     className="progress-bar-fill"
-                    style={{ width: `${progress}%` }}
+                    style={{
+                      width: `${progress}%`,
+                    }}
                   />
                 </div>
               </motion.div>
@@ -1050,18 +1119,25 @@ export default function DashboardPage() {
                 }}
               >
                 <div>
-                  <h3 style={{ margin: 0 }}>Invoices</h3>
+                  <h3 style={{ margin: 0 }}>
+                    Invoices
+                  </h3>
+
                   <span
                     style={{
                       display: "block",
                       marginTop: "0.25rem",
                       fontSize: "0.82rem",
-                      color: "var(--muted-foreground)",
+                      color:
+                        "var(--muted-foreground)",
                     }}
                   >
                     Showing {startIndex + 1}–
-                    {Math.min(endIndex, invoices.length)} of{" "}
-                    {invoices.length}
+                    {Math.min(
+                      endIndex,
+                      invoices.length
+                    )}{" "}
+                    of {invoices.length}
                   </span>
                 </div>
 
@@ -1101,9 +1177,10 @@ export default function DashboardPage() {
                     width: "100%",
                     maxWidth: "100%",
                     minWidth: 0,
-                    overflowX: "scroll",
+                    overflowX: "auto",
                     overflowY: "hidden",
-                    WebkitOverflowScrolling: "touch",
+                    WebkitOverflowScrolling:
+                      "touch",
                     scrollbarWidth: "auto",
                   }}
                 >
@@ -1114,141 +1191,191 @@ export default function DashboardPage() {
                       minWidth: "1000px",
                     }}
                   >
-                  <thead>
-                    <tr>
-                      <th>Invoice #</th>
-                      <th>Contact</th>
-                      <th>Invoice Date</th>
-                      <th>Due Date</th>
-                      <th>Total</th>
-                      <th>Paid</th>
-                      <th>Due</th>
-                      <th>Payment Status</th>
-                      <th>Timing</th>
-                      <th>View</th>
-                    </tr>
-                  </thead>
+                    <thead>
+                      <tr>
+                        <th>Invoice #</th>
+                        <th>Contact</th>
+                        <th>Invoice Date</th>
+                        <th>Due Date</th>
+                        <th>Total</th>
+                        <th>Paid</th>
+                        <th>Due</th>
+                        <th>Payment Status</th>
+                        <th>Timing</th>
+                        <th>View</th>
+                      </tr>
+                    </thead>
 
-                  <tbody>
-                    {currentInvoices.map((invoice) => (
-                      <motion.tr
-                        key={invoice.id}
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                      >
-                        <td style={{ fontWeight: 700 }}>
-                          {invoice.invoiceNumber}
-                        </td>
-
-                        <td>{invoice.contact || "N/A"}</td>
-
-                        <td>{formatDate(invoice.invoiceDate)}</td>
-
-                        <td>{formatDate(invoice.dueDate)}</td>
-
-                        <td>
-                          {formatMoney(
-                            invoice.totalAmount,
-                            invoice.currency
-                          )}
-                        </td>
-
-                        <td>
-                          {formatMoney(
-                            invoice.paidAmount,
-                            invoice.currency
-                          )}
-                        </td>
-
-                        <td>
-                          {formatMoney(
-                            Math.max(invoice.amountDue ?? 0, 0),
-                            invoice.currency
-                          )}
-                        </td>
-
-                        <td>
-                          <span
-                            style={paymentStyle(
-                              invoice.paymentStatus
-                            )}
-                          >
-                            {invoice.paymentStatus === "matched" ? (
-                              <CheckCircle2 size={14} />
-                            ) : invoice.paymentStatus === "failed" ? (
-                              <XCircle size={14} />
-                            ) : (
-                              <AlertTriangle size={14} />
-                            )}
-                            {paymentLabel(invoice.paymentStatus)}
-                          </span>
-
-                          {invoice.error && (
-                            <div
-                              style={{
-                                display: "flex",
-                                alignItems: "flex-start",
-                                gap: "0.3rem",
-                                marginTop: "0.4rem",
-                                color: "#b91c1c",
-                                fontSize: "0.72rem",
-                                lineHeight: 1.35,
-                                maxWidth: "220px",
-                              }}
-                            >
-                              <AlertTriangle
-                                size={13}
-                                style={{ flexShrink: 0 }}
-                              />
-                              {invoice.error}
-                            </div>
-                          )}
-                        </td>
-
-                        <td>
-                          <span
-                            style={timingStyle(
-                              invoice.timingStatus
-                            )}
-                          >
-                            {invoice.timingStatus === "on_time" ? (
-                              <CheckCircle2 size={14} />
-                            ) : invoice.timingStatus === "overdue" ||
-                              invoice.timingStatus === "late" ? (
-                              <Clock3 size={14} />
-                            ) : (
-                              <AlertTriangle size={14} />
-                            )}
-                            {timingLabel(invoice.timingStatus)}
-                          </span>
-                        </td>
-
-                        <td>
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setSelectedInvoice(invoice)
-                            }
+                    <tbody>
+                      {currentInvoices.map((invoice) => (
+                        <motion.tr
+                          key={invoice.id}
+                          initial={{ opacity: 0 }}
+                          animate={{ opacity: 1 }}
+                        >
+                          <td
                             style={{
-                              display: "inline-flex",
-                              alignItems: "center",
-                              gap: "0.35rem",
-                              background: "#f1ece5",
-                              color: "var(--primary)",
-                              border: "1px solid var(--border)",
-                              borderRadius: "0.5rem",
-                              padding: "0.5rem 0.7rem",
                               fontWeight: 700,
-                              cursor: "pointer",
                             }}
                           >
-                            <Eye size={15} />
-                            View
-                          </button>
-                        </td>
-                      </motion.tr>
-                    ))}
-                  </tbody>
+                            {invoice.invoiceNumber}
+                          </td>
+
+                          <td>
+                            {invoice.contact || "N/A"}
+                          </td>
+
+                          <td>
+                            {formatDate(
+                              invoice.invoiceDate
+                            )}
+                          </td>
+
+                          <td>
+                            {formatDate(
+                              invoice.dueDate
+                            )}
+                          </td>
+
+                          <td>
+                            {formatMoney(
+                              invoice.totalAmount,
+                              invoice.currency
+                            )}
+                          </td>
+
+                          <td>
+                            {formatMoney(
+                              invoice.paidAmount,
+                              invoice.currency
+                            )}
+                          </td>
+
+                          <td>
+                            {formatMoney(
+                              Math.max(
+                                invoice.amountDue ?? 0,
+                                0
+                              ),
+                              invoice.currency
+                            )}
+                          </td>
+
+                          <td>
+                            <span
+                              style={paymentStyle(
+                                invoice.paymentStatus
+                              )}
+                            >
+                              {invoice.paymentStatus ===
+                              "matched" ? (
+                                <CheckCircle2
+                                  size={14}
+                                />
+                              ) : invoice.paymentStatus ===
+                                "failed" ? (
+                                <XCircle size={14} />
+                              ) : (
+                                <AlertTriangle
+                                  size={14}
+                                />
+                              )}
+
+                              {paymentLabel(
+                                invoice.paymentStatus
+                              )}
+                            </span>
+
+                            {invoice.error && (
+                              <div
+                                style={{
+                                  display: "flex",
+                                  alignItems:
+                                    "flex-start",
+                                  gap: "0.3rem",
+                                  marginTop:
+                                    "0.4rem",
+                                  color: "#b91c1c",
+                                  fontSize: "0.72rem",
+                                  lineHeight: 1.35,
+                                  maxWidth: "220px",
+                                }}
+                              >
+                                <AlertTriangle
+                                  size={13}
+                                  style={{
+                                    flexShrink: 0,
+                                  }}
+                                />
+
+                                {invoice.error}
+                              </div>
+                            )}
+                          </td>
+
+                          <td>
+                            <span
+                              style={timingStyle(
+                                invoice.timingStatus
+                              )}
+                            >
+                              {invoice.timingStatus ===
+                              "on_time" ? (
+                                <CheckCircle2
+                                  size={14}
+                                />
+                              ) : invoice.timingStatus ===
+                                  "overdue" ||
+                                invoice.timingStatus ===
+                                  "late" ? (
+                                <Clock3 size={14} />
+                              ) : (
+                                <AlertTriangle
+                                  size={14}
+                                />
+                              )}
+
+                              {timingLabel(
+                                invoice.timingStatus
+                              )}
+                            </span>
+                          </td>
+
+                          <td>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setSelectedInvoice(
+                                  invoice
+                                )
+                              }
+                              style={{
+                                display:
+                                  "inline-flex",
+                                alignItems:
+                                  "center",
+                                gap: "0.35rem",
+                                background:
+                                  "#f1ece5",
+                                color:
+                                  "var(--primary)",
+                                border:
+                                  "1px solid var(--border)",
+                                borderRadius:
+                                  "0.5rem",
+                                padding:
+                                  "0.5rem 0.7rem",
+                                fontWeight: 700,
+                                cursor: "pointer",
+                              }}
+                            >
+                              <Eye size={15} />
+                              View
+                            </button>
+                          </td>
+                        </motion.tr>
+                      ))}
+                    </tbody>
                   </table>
                 </div>
               </div>
@@ -1257,7 +1384,8 @@ export default function DashboardPage() {
                 <div
                   style={{
                     display: "flex",
-                    justifyContent: "center",
+                    justifyContent:
+                      "center",
                     alignItems: "center",
                     gap: "0.45rem",
                     marginTop: "1.25rem",
@@ -1268,38 +1396,52 @@ export default function DashboardPage() {
                     type="button"
                     disabled={safePage === 1}
                     onClick={() =>
-                      setCurrentPage((page) =>
-                        Math.max(page - 1, 1)
+                      setCurrentPage(
+                        (page) =>
+                          Math.max(page - 1, 1)
                       )
                     }
                     style={{
                       padding: "0.5rem 0.85rem",
                       borderRadius: "0.5rem",
-                      border: "1px solid var(--border)",
+                      border:
+                        "1px solid var(--border)",
                       background:
-                        safePage === 1 ? "#f3eee8" : "#fff",
+                        safePage === 1
+                          ? "#f3eee8"
+                          : "#fff",
                       color:
-                        safePage === 1 ? "#a99b8d" : "#3f352c",
+                        safePage === 1
+                          ? "#a99b8d"
+                          : "#3f352c",
                       cursor:
-                        safePage === 1 ? "not-allowed" : "pointer",
+                        safePage === 1
+                          ? "not-allowed"
+                          : "pointer",
                     }}
                   >
                     Previous
                   </button>
 
                   {Array.from(
-                    { length: totalPages },
-                    (_, index) => index + 1
+                    {
+                      length: totalPages,
+                    },
+                    (_, index) =>
+                      index + 1
                   ).map((page) => (
                     <button
                       type="button"
                       key={page}
-                      onClick={() => setCurrentPage(page)}
+                      onClick={() =>
+                        setCurrentPage(page)
+                      }
                       style={{
                         minWidth: "40px",
                         padding: "0.5rem 0.7rem",
                         borderRadius: "0.5rem",
-                        border: "1px solid var(--border)",
+                        border:
+                          "1px solid var(--border)",
                         background:
                           safePage === page
                             ? "var(--primary)"
@@ -1309,7 +1451,9 @@ export default function DashboardPage() {
                             ? "#fff"
                             : "#3f352c",
                         fontWeight:
-                          safePage === page ? 800 : 600,
+                          safePage === page
+                            ? 800
+                            : 600,
                         cursor: "pointer",
                       }}
                     >
@@ -1319,18 +1463,27 @@ export default function DashboardPage() {
 
                   <button
                     type="button"
-                    disabled={safePage === totalPages}
+                    disabled={
+                      safePage === totalPages
+                    }
                     onClick={() =>
-                      setCurrentPage((page) =>
-                        Math.min(page + 1, totalPages)
+                      setCurrentPage(
+                        (page) =>
+                          Math.min(
+                            page + 1,
+                            totalPages
+                          )
                       )
                     }
                     style={{
                       padding: "0.5rem 0.85rem",
                       borderRadius: "0.5rem",
-                      border: "1px solid var(--border)",
+                      border:
+                        "1px solid var(--border)",
                       background:
-                        safePage === totalPages ? "#f3eee8" : "#fff",
+                        safePage === totalPages
+                          ? "#f3eee8"
+                          : "#fff",
                       color:
                         safePage === totalPages
                           ? "#a99b8d"
@@ -1356,39 +1509,309 @@ export default function DashboardPage() {
                   textAlign: "center",
                   background: "#faf8f4",
                   borderRadius: "0.9rem",
-                  border: "1px dashed var(--border)",
+                  border:
+                    "1px dashed var(--border)",
                 }}
               >
                 <FileText
                   size={34}
                   style={{
-                    margin: "0 auto 0.75rem",
-                    color: "var(--muted-foreground)",
+                    margin:
+                      "0 auto 0.75rem",
+                    color:
+                      "var(--muted-foreground)",
                     opacity: 0.65,
                   }}
                 />
+
                 <p
                   style={{
                     margin: 0,
-                    color: "var(--muted-foreground)",
+                    color:
+                      "var(--muted-foreground)",
                   }}
                 >
-                  No invoices found for this account.
+                  No invoices found for this
+                  account.
                 </p>
+
                 <p
                   style={{
                     marginTop: "0.3rem",
                     fontSize: "0.85rem",
-                    color: "var(--muted-foreground)",
+                    color:
+                      "var(--muted-foreground)",
                   }}
                 >
-                  Upload your CSV above to start reconciliation.
+                  Upload an invoice file above
+                  to start AI-assisted
+                  reconciliation.
                 </p>
               </motion.div>
             )
           )}
         </motion.div>
       </motion.div>
+
+      <AnimatePresence>
+        {isAnalyticsOpen && (
+          <div
+            onClick={() => setIsAnalyticsOpen(false)}
+            style={{
+              position: "fixed",
+              inset: 0,
+              zIndex: 80,
+              background: "rgba(63, 53, 44, 0.28)",
+              backdropFilter: "blur(4px)",
+              display: "flex",
+              justifyContent: "flex-end",
+            }}
+          >
+            <motion.div
+              initial={{ x: "100%" }}
+              animate={{ x: 0 }}
+              exit={{ x: "100%" }}
+              transition={{
+                type: "spring",
+                damping: 25,
+                stiffness: 220,
+              }}
+              onClick={(event) => event.stopPropagation()}
+              style={{
+                width: "100%",
+                maxWidth: "500px",
+                height: "100vh",
+                background: "#fdfbf7",
+                borderLeft: "1px solid var(--border)",
+                boxShadow:
+                  "-10px 0 30px rgba(63, 53, 44, 0.15)",
+                overflowY: "auto",
+              }}
+            >
+              <div
+                style={{
+                  padding: "1.2rem 1.4rem",
+                  borderBottom: "1px solid var(--border)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  background: "#f7f3ed",
+                  position: "sticky",
+                  top: 0,
+                  zIndex: 1,
+                }}
+              >
+                <div>
+                  <div
+                    style={{
+                      fontSize: "0.78rem",
+                      color: "var(--muted-foreground)",
+                      marginBottom: "0.2rem",
+                    }}
+                  >
+                    Dashboard Insights
+                  </div>
+
+                  <h2
+                    style={{
+                      margin: 0,
+                      fontSize: "1.35rem",
+                      color: "#3f352c",
+                    }}
+                  >
+                    Analytics
+                  </h2>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setIsAnalyticsOpen(false)}
+                  style={{
+                    width: "38px",
+                    height: "38px",
+                    borderRadius: "50%",
+                    border: "1px solid var(--border)",
+                    background: "#fff",
+                    color: "#6b5c4d",
+                    cursor: "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              <div
+                style={{
+                  padding: "1rem",
+                  display: "grid",
+                  gap: "0.8rem",
+                }}
+              >
+                <div
+                  style={{
+                    background: "#faf8f4",
+                    border: "1px solid var(--border)",
+                    borderRadius: "1rem",
+                    padding: "0.9rem",
+                  }}
+                >
+                  <div
+                    style={{
+                      marginBottom: "0.65rem",
+                      fontWeight: 800,
+                      color: "#3f352c",
+                    }}
+                  >
+                    Reconciliation Summary
+                  </div>
+
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns:
+                        "repeat(2, minmax(0, 1fr))",
+                      gap: "0.6rem",
+                    }}
+                  >
+                    {summaryCard(
+                      "Total Invoices",
+                      totalInvoices,
+                      <FileText size={18} />
+                    )}
+
+                    {summaryCard(
+                      "Matched",
+                      matchedInvoices,
+                      <CheckCircle2 size={18} />,
+                      "#16a34a"
+                    )}
+
+                    {summaryCard(
+                      "Partially Paid",
+                      partiallyPaidInvoices,
+                      <Clock3 size={18} />,
+                      "#d97706"
+                    )}
+
+                    {summaryCard(
+                      "Unpaid",
+                      unpaidInvoices,
+                      <AlertTriangle size={18} />,
+                      "#6b7280"
+                    )}
+
+                    {summaryCard(
+                      "Overpaid",
+                      overpaidInvoices,
+                      <CheckCircle2 size={18} />,
+                      "#7c3aed"
+                    )}
+
+                    {summaryCard(
+                      "Failed",
+                      failedInvoices,
+                      <XCircle size={18} />,
+                      "#dc2626"
+                    )}
+
+                    {summaryCard(
+                      "Overdue",
+                      overdueInvoices,
+                      <Clock3 size={18} />,
+                      "#dc2626"
+                    )}
+                  </div>
+                </div>
+
+                <div
+                  style={{
+                    background: "#f7f3ed",
+                    border: "1px solid var(--border)",
+                    borderRadius: "1rem",
+                    padding: "0.9rem",
+                  }}
+                >
+                  <div
+                    style={{
+                      marginBottom: "0.65rem",
+                      fontWeight: 800,
+                      color: "#3f352c",
+                    }}
+                  >
+                    Financial Overview
+                  </div>
+
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns:
+                        "repeat(2, minmax(0, 1fr))",
+                      gap: "0.6rem",
+                    }}
+                  >
+                    {summaryCard(
+                      "Invoice Value",
+                      formatMoney(invoiceValue),
+                      <FileText size={18} />
+                    )}
+
+                    {summaryCard(
+                      "Total Tax",
+                      formatMoney(totalTax),
+                      <FileText size={18} />
+                    )}
+
+                    {summaryCard(
+                      "Total Payable",
+                      formatMoney(totalPayable),
+                      <FileText size={18} />
+                    )}
+
+                    {summaryCard(
+                      "Total Paid",
+                      formatMoney(totalPaid),
+                      <CheckCircle2 size={18} />,
+                      "#16a34a"
+                    )}
+
+                    {summaryCard(
+                      "Outstanding",
+                      formatMoney(outstanding),
+                      <AlertTriangle size={18} />,
+                      "#d97706"
+                    )}
+
+                    {summaryCard(
+                      "Overpaid",
+                      formatMoney(totalOverpaid),
+                      <CheckCircle2 size={18} />,
+                      "#7c3aed"
+                    )}
+                  </div>
+                </div>
+
+                <div
+                  style={{
+                    padding: "1rem",
+                    background: "#fff",
+                    border: "1px solid var(--border)",
+                    borderRadius: "0.8rem",
+                    fontSize: "0.82rem",
+                    color: "var(--muted-foreground)",
+                    lineHeight: 1.5,
+                  }}
+                >
+                  Analytics are calculated from the invoices currently
+                  loaded for this account.
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
       <AnimatePresence>
         {selectedInvoice && (
@@ -1416,7 +1839,7 @@ export default function DashboardPage() {
               onClick={(event) => event.stopPropagation()}
               style={{
                 width: "100%",
-                maxWidth: "520px",
+                maxWidth: "500px",
                 height: "100vh",
                 background: "#fdfbf7",
                 borderLeft: "1px solid var(--border)",
@@ -1426,218 +1849,603 @@ export default function DashboardPage() {
             >
               <div
                 style={{
-                  padding: "1.25rem 1.5rem",
+                  padding: "1.15rem 1.4rem",
                   borderBottom: "1px solid var(--border)",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
                   background: "#f7f3ed",
+                  position: "sticky",
+                  top: 0,
+                  zIndex: 2,
                 }}
               >
-                <div>
-                  <div
-                    style={{
-                      fontSize: "0.78rem",
-                      color: "var(--muted-foreground)",
-                      marginBottom: "0.2rem",
-                    }}
-                  >
-                    Invoice Details
-                  </div>
-                  <h2
-                    style={{
-                      margin: 0,
-                      fontSize: "1.3rem",
-                      color: "#3f352c",
-                    }}
-                  >
-                    {selectedInvoice.invoiceNumber}
-                  </h2>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={() => setSelectedInvoice(null)}
+                <div
                   style={{
-                    width: "38px",
-                    height: "38px",
-                    borderRadius: "50%",
-                    border: "1px solid var(--border)",
-                    background: "#fff",
-                    color: "#6b5c4d",
-                    cursor: "pointer",
                     display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
+                    alignItems: "flex-start",
+                    justifyContent: "space-between",
+                    gap: "1rem",
                   }}
                 >
-                  <X size={18} />
-                </button>
+                  <div style={{ minWidth: 0 }}>
+                    <div
+                      style={{
+                        fontSize: "0.76rem",
+                        color: "var(--muted-foreground)",
+                        marginBottom: "0.25rem",
+                        fontWeight: 600,
+                      }}
+                    >
+                      Invoice Details
+                    </div>
+
+                    <h2
+                      style={{
+                        margin: 0,
+                        fontSize: "1.4rem",
+                        color: "#3f352c",
+                        lineHeight: 1.2,
+                        wordBreak: "break-word",
+                      }}
+                    >
+                      {selectedInvoice.invoiceNumber}
+                    </h2>
+
+                    <div
+                      style={{
+                        marginTop: "0.35rem",
+                        color: "var(--muted-foreground)",
+                        fontSize: "0.88rem",
+                        wordBreak: "break-word",
+                      }}
+                    >
+                      {selectedInvoice.contact || "N/A"}
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    aria-label="Close invoice details"
+                    onClick={() => setSelectedInvoice(null)}
+                    style={{
+                      width: "38px",
+                      height: "38px",
+                      flexShrink: 0,
+                      borderRadius: "50%",
+                      border: "1px solid var(--border)",
+                      background: "#fff",
+                      color: "#6b5c4d",
+                      cursor: "pointer",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                    }}
+                  >
+                    <X size={18} />
+                  </button>
+                </div>
+
+                <div
+                  style={{
+                    display: "flex",
+                    flexWrap: "wrap",
+                    gap: "0.5rem",
+                    marginTop: "0.85rem",
+                  }}
+                >
+                  <span style={paymentStyle(selectedInvoice.paymentStatus)}>
+                    {selectedInvoice.paymentStatus === "matched" ? (
+                      <CheckCircle2 size={14} />
+                    ) : selectedInvoice.paymentStatus === "failed" ? (
+                      <XCircle size={14} />
+                    ) : (
+                      <AlertTriangle size={14} />
+                    )}
+                    {paymentLabel(selectedInvoice.paymentStatus)}
+                  </span>
+
+                  <span style={timingStyle(selectedInvoice.timingStatus)}>
+                    {selectedInvoice.timingStatus === "on_time" ? (
+                      <CheckCircle2 size={14} />
+                    ) : selectedInvoice.timingStatus === "overdue" ||
+                      selectedInvoice.timingStatus === "late" ? (
+                      <Clock3 size={14} />
+                    ) : (
+                      <AlertTriangle size={14} />
+                    )}
+                    {timingLabel(selectedInvoice.timingStatus)}
+                  </span>
+                </div>
               </div>
 
               <div
                 style={{
-                  padding: "1.5rem",
+                  padding: "1.2rem",
                   display: "grid",
-                  gap: "0.8rem",
+                  gap: "1rem",
                 }}
               >
-                {[
-                  ["Contact", selectedInvoice.contact || "N/A"],
-                  ["Invoice Date", formatDate(selectedInvoice.invoiceDate)],
-                  ["Due Date", formatDate(selectedInvoice.dueDate)],
-                  [
-                    "Invoice Value",
-                    formatMoney(
-                      selectedInvoice.amount,
-                      selectedInvoice.currency
-                    ),
-                  ],
-                  [
-                    "Tax",
-                    formatMoney(
-                      selectedInvoice.tax,
-                      selectedInvoice.currency
-                    ),
-                  ],
-                  [
-                    "Total Payable",
-                    formatMoney(
-                      selectedInvoice.totalAmount,
-                      selectedInvoice.currency
-                    ),
-                  ],
-                  [
-                    "Paid Amount",
-                    formatMoney(
-                      selectedInvoice.paidAmount,
-                      selectedInvoice.currency
-                    ),
-                  ],
-                  [
-                    "Amount Due",
-                    formatMoney(
-                      Math.max(selectedInvoice.amountDue ?? 0, 0),
-                      selectedInvoice.currency
-                    ),
-                  ],
-                  [
-                    "Paid Date",
-                    formatDate(selectedInvoice.paidDate),
-                  ],
-                ].map(([label, value]) => (
+                <section>
                   <div
-                    key={label}
                     style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      alignItems: "center",
-                      gap: "1rem",
-                      padding: "0.9rem 1rem",
-                      background: "#fff",
-                      border: "1px solid var(--border)",
-                      borderRadius: "0.7rem",
+                      marginBottom: "0.65rem",
+                      fontWeight: 800,
+                      color: "#3f352c",
+                      fontSize: "0.95rem",
                     }}
                   >
-                    <span
-                      style={{
-                        color: "var(--muted-foreground)",
-                        fontSize: "0.85rem",
-                      }}
-                    >
-                      {label}
-                    </span>
-                    <span
-                      style={{
-                        color: "#3f352c",
-                        fontWeight: 700,
-                        textAlign: "right",
-                      }}
-                    >
-                      {value}
-                    </span>
+                    Payment Summary
                   </div>
-                ))}
 
-                <div
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+                      gap: "0.7rem",
+                    }}
+                  >
+                    {[
+                      [
+                        "Total Payable",
+                        formatMoney(
+                          selectedInvoice.totalAmount,
+                          selectedInvoice.currency
+                        ),
+                      ],
+                      [
+                        "Paid Amount",
+                        formatMoney(
+                          selectedInvoice.paidAmount,
+                          selectedInvoice.currency
+                        ),
+                      ],
+                      [
+                        "Amount Due",
+                        formatMoney(
+                          Math.max(selectedInvoice.amountDue ?? 0, 0),
+                          selectedInvoice.currency
+                        ),
+                      ],
+                      [
+                        "Overpaid",
+                        formatMoney(
+                          Math.max(
+                            (selectedInvoice.paidAmount ?? 0) -
+                              (selectedInvoice.totalAmount ?? 0),
+                            0
+                          ),
+                          selectedInvoice.currency
+                        ),
+                      ],
+                    ].map(([label, value]) => (
+                      <div
+                        key={label}
+                        style={{
+                          padding: "0.9rem",
+                          background: "#fff",
+                          border: "1px solid var(--border)",
+                          borderRadius: "0.75rem",
+                        }}
+                      >
+                        <div
+                          style={{
+                            fontSize: "0.76rem",
+                            color: "var(--muted-foreground)",
+                            marginBottom: "0.35rem",
+                          }}
+                        >
+                          {label}
+                        </div>
+                        <div
+                          style={{
+                            color: "#3f352c",
+                            fontSize: "1rem",
+                            fontWeight: 800,
+                          }}
+                        >
+                          {value}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </section>
+
+                <section
                   style={{
-                    marginTop: "0.4rem",
-                    padding: "1rem",
-                    background: "#fff",
+                    background: "#faf8f4",
                     border: "1px solid var(--border)",
-                    borderRadius: "0.7rem",
+                    borderRadius: "0.9rem",
+                    padding: "1rem",
                   }}
                 >
                   <div
                     style={{
-                      fontSize: "0.8rem",
-                      color: "var(--muted-foreground)",
-                      marginBottom: "0.5rem",
+                      marginBottom: "0.7rem",
+                      fontWeight: 800,
+                      color: "#3f352c",
+                      fontSize: "0.95rem",
                     }}
                   >
-                    Payment Status
+                    Invoice Information
                   </div>
-                  <span
-                    style={paymentStyle(
-                      selectedInvoice.paymentStatus
-                    )}
-                  >
-                    {paymentLabel(selectedInvoice.paymentStatus)}
-                  </span>
-                </div>
 
-                <div
-                  style={{
-                    padding: "1rem",
-                    background: "#fff",
-                    border: "1px solid var(--border)",
-                    borderRadius: "0.7rem",
-                  }}
-                >
                   <div
                     style={{
-                      fontSize: "0.8rem",
-                      color: "var(--muted-foreground)",
-                      marginBottom: "0.5rem",
+                      display: "grid",
+                      gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+                      gap: "0.65rem",
                     }}
                   >
-                    Timing Status
+                    {[
+                      [
+                        "Contact",
+                        selectedInvoice.contact || "N/A",
+                      ],
+                      [
+                        "Invoice Date",
+                        formatDate(selectedInvoice.invoiceDate),
+                      ],
+                      [
+                        "Due Date",
+                        formatDate(selectedInvoice.dueDate),
+                      ],
+                      [
+                        "Paid Date",
+                        formatDate(selectedInvoice.paidDate),
+                      ],
+                      [
+                        "Invoice Value",
+                        formatMoney(
+                          selectedInvoice.amount,
+                          selectedInvoice.currency
+                        ),
+                      ],
+                      [
+                        "Tax",
+                        formatMoney(
+                          selectedInvoice.tax,
+                          selectedInvoice.currency
+                        ),
+                      ],
+                      [
+                        "Currency",
+                        selectedInvoice.currency || "INR",
+                      ],
+                      ...(selectedInvoice.gstNumber
+                        ? [["GST Number", selectedInvoice.gstNumber]]
+                        : []),
+                    ].map(([label, value]) => (
+                      <div
+                        key={label}
+                        style={{
+                          minWidth: 0,
+                          padding: "0.8rem 0.85rem",
+                          background: "#fff",
+                          border: "1px solid var(--border)",
+                          borderRadius: "0.7rem",
+                        }}
+                      >
+                        <div
+                          style={{
+                            fontSize: "0.73rem",
+                            color: "var(--muted-foreground)",
+                            marginBottom: "0.3rem",
+                          }}
+                        >
+                          {label}
+                        </div>
+                        <div
+                          style={{
+                            color: "#3f352c",
+                            fontWeight: 700,
+                            fontSize: "0.86rem",
+                            lineHeight: 1.35,
+                            overflowWrap: "anywhere",
+                          }}
+                        >
+                          {value}
+                        </div>
+                      </div>
+                    ))}
                   </div>
-                  <span
-                    style={timingStyle(selectedInvoice.timingStatus)}
-                  >
-                    {timingLabel(selectedInvoice.timingStatus)}
-                  </span>
-                </div>
+                </section>
 
                 {selectedInvoice.error && (
                   <div
                     style={{
-                      padding: "1rem",
+                      padding: "0.9rem 1rem",
                       background: "#fff1f2",
                       border: "1px solid #fecaca",
-                      borderRadius: "0.7rem",
+                      borderRadius: "0.75rem",
                       color: "#991b1b",
-                      fontSize: "0.85rem",
+                      fontSize: "0.84rem",
+                      lineHeight: 1.45,
                     }}
                   >
-                    <strong>Error:</strong> {selectedInvoice.error}
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "0.45rem",
+                        fontWeight: 800,
+                        marginBottom: "0.3rem",
+                      }}
+                    >
+                      <AlertTriangle size={15} />
+                      Processing Error
+                    </div>
+                    {selectedInvoice.error}
                   </div>
                 )}
+
+                <div
+                  style={{
+                    padding: "0.85rem 1rem",
+                    background: "#f7f3ed",
+                    border: "1px solid var(--border)",
+                    borderRadius: "0.75rem",
+                    color: "var(--muted-foreground)",
+                    fontSize: "0.78rem",
+                    lineHeight: 1.45,
+                  }}
+                >
+                  Details are based on the invoice data currently loaded for
+                  this account.
+                </div>
               </div>
             </motion.div>
           </div>
         )}
       </AnimatePresence>
 
+      <motion.footer
+        variants={itemVariants}
+        initial="hidden"
+        whileInView="show"
+        viewport={{ once: true }}
+        style={{
+          marginTop: "2rem",
+          padding: "1.1rem 1.25rem",
+          borderRadius: "1rem",
+          background: "#f7f3ed",
+          border: "1px solid var(--border)",
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: "1rem",
+            flexWrap: "wrap",
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "0.8rem",
+            }}
+          >
+            <div
+              style={{
+                width: "40px",
+                height: "40px",
+                borderRadius: "0.7rem",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                background: "#ede5da",
+                color: "var(--primary)",
+                flexShrink: 0,
+              }}
+            >
+              <MessageSquare size={19} />
+            </div>
+
+            <div>
+              <div
+                style={{
+                  fontWeight: 800,
+                  color: "#3f352c",
+                  fontSize: "0.95rem",
+                }}
+              >
+                Any issue?
+              </div>
+              <div
+                style={{
+                  marginTop: "0.15rem",
+                  color: "var(--muted-foreground)",
+                  fontSize: "0.78rem",
+                }}
+              >
+                Tell us what went wrong or what we can improve.
+              </div>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => {
+              setIsFeedbackOpen((open) => !open);
+              setFeedbackStatus("");
+            }}
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "0.4rem",
+              padding: "0.65rem 0.95rem",
+              borderRadius: "0.6rem",
+              border: "1px solid var(--border)",
+              background: isFeedbackOpen ? "#3f352c" : "#ede5da",
+              color: isFeedbackOpen ? "#fff" : "var(--primary)",
+              fontWeight: 700,
+              cursor: "pointer",
+              flexShrink: 0,
+            }}
+          >
+            <MessageSquare size={15} />
+            {isFeedbackOpen ? "Close" : "Any Issue?"}
+          </button>
+        </div>
+
+        <AnimatePresence initial={false}>
+          {isFeedbackOpen && (
+            <motion.div
+              initial={{ opacity: 0, height: 0, marginTop: 0 }}
+              animate={{ opacity: 1, height: "auto", marginTop: "1rem" }}
+              exit={{ opacity: 0, height: 0, marginTop: 0 }}
+              transition={{ duration: 0.22 }}
+              style={{ overflow: "hidden" }}
+            >
+              <div
+                style={{
+                  paddingTop: "1rem",
+                  borderTop: "1px solid var(--border)",
+                }}
+              >
+                <form
+                  onSubmit={handleFeedbackSubmit}
+                  style={{
+                    display: "grid",
+                    gap: "0.7rem",
+                  }}
+                >
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns:
+                        "repeat(2, minmax(0, 1fr))",
+                      gap: "0.7rem",
+                    }}
+                  >
+                    <input
+                      type="text"
+                      placeholder="Your name"
+                      value={feedbackName}
+                      onChange={(event) =>
+                        setFeedbackName(event.target.value)
+                      }
+                      style={{
+                        width: "100%",
+                        padding: "0.75rem 0.85rem",
+                        borderRadius: "0.65rem",
+                        border: "1px solid var(--border)",
+                        background: "#fff",
+                        color: "#3f352c",
+                        boxSizing: "border-box",
+                        fontFamily: "inherit",
+                      }}
+                    />
+
+                    <div
+                      style={{
+                        width: "100%",
+                        padding: "0.75rem 0.85rem",
+                        borderRadius: "0.65rem",
+                        border: "1px solid var(--border)",
+                        background: "#f8f5f0",
+                        color: "#6b5c4d",
+                        boxSizing: "border-box",
+                        fontFamily: "inherit",
+                        fontSize: "0.85rem",
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap",
+                      }}
+                      title={user?.email || ""}
+                    >
+                      {user?.email || "Logged-in email"}
+                    </div>
+                  </div>
+
+                  <textarea
+                    placeholder="Tell us your concern..."
+                    value={feedbackMessage}
+                    onChange={(event) =>
+                      setFeedbackMessage(event.target.value)
+                    }
+                    rows={3}
+                    style={{
+                      width: "100%",
+                      padding: "0.75rem 0.85rem",
+                      borderRadius: "0.65rem",
+                      border: "1px solid var(--border)",
+                      background: "#fff",
+                      color: "#3f352c",
+                      resize: "vertical",
+                      boxSizing: "border-box",
+                      fontFamily: "inherit",
+                    }}
+                  />
+
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "0.8rem",
+                      flexWrap: "wrap",
+                    }}
+                  >
+                    <button
+                      type="submit"
+                      className="btn-primary"
+                      disabled={feedbackLoading}
+                      style={{
+                        padding: "0.7rem 1.1rem",
+                        opacity: feedbackLoading ? 0.7 : 1,
+                      }}
+                    >
+                      {feedbackLoading
+                        ? "Submitting..."
+                        : "Submit Feedback"}
+                    </button>
+
+                    {feedbackStatus && (
+                      <span
+                        style={{
+                          color: feedbackStatus.startsWith("Thank you")
+                            ? "#166534"
+                            : "#b91c1c",
+                          fontSize: "0.8rem",
+                          fontWeight: 600,
+                        }}
+                      >
+                        {feedbackStatus}
+                      </span>
+                    )}
+                  </div>
+                </form>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        <div
+          style={{
+            marginTop: "0.9rem",
+            paddingTop: "0.75rem",
+            borderTop: isFeedbackOpen
+              ? "none"
+              : "1px solid var(--border)",
+            textAlign: "center",
+            color: "var(--muted-foreground)",
+            fontSize: "0.72rem",
+          }}
+        >
+          Feedback helps us improve ClearTax.
+        </div>
+      </motion.footer>
+
       <HistoryDrawer
         isOpen={isHistoryOpen}
-        onClose={() => setIsHistoryOpen(false)}
+        onClose={() =>
+          setIsHistoryOpen(false)
+        }
         invoices={historyInvoices}
-        onSelectInvoice={(invoice) => setSelectedInvoice(invoice)}
+        onSelectInvoice={(invoice) =>
+          setSelectedInvoice(invoice)
+        }
       />
     </main>
   );
 }
-
-
