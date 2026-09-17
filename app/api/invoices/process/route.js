@@ -289,7 +289,156 @@ function csvRowsToInvoices(csvText) {
 
   return invoices;
 }
+  /* -------------------------------------------------------
+   CONVERT STRUCTURED XLSX SHEET TO INVOICE OBJECTS
+------------------------------------------------------- */
 
+function worksheetToInvoices(worksheet) {
+  const rows = XLSX.utils.sheet_to_json(worksheet, {
+    header: 1,
+    defval: "",
+    raw: false,
+  });
+
+  const nonEmptyRows = rows.filter(
+    (row) =>
+      Array.isArray(row) &&
+      row.some(
+        (value) =>
+          String(value ?? "").trim() !== ""
+      )
+  );
+
+  if (nonEmptyRows.length <= 1) {
+    return null;
+  }
+
+  const headers = nonEmptyRows[0].map(
+    normalizeHeader
+  );
+
+  const mapping = {
+    invoiceNumber: findHeaderIndex(
+      headers,
+      "invoiceNumber"
+    ),
+
+    invoiceDate: findHeaderIndex(
+      headers,
+      "invoiceDate"
+    ),
+
+    dueDate: findHeaderIndex(
+      headers,
+      "dueDate"
+    ),
+
+    contact: findHeaderIndex(
+      headers,
+      "contact"
+    ),
+
+    currency: findHeaderIndex(
+      headers,
+      "currency"
+    ),
+
+    amount: findHeaderIndex(
+      headers,
+      "amount"
+    ),
+
+    tax: findHeaderIndex(
+      headers,
+      "tax"
+    ),
+
+    paidAmount: findHeaderIndex(
+      headers,
+      "paidAmount"
+    ),
+
+    paidDate: findHeaderIndex(
+      headers,
+      "paidDate"
+    ),
+
+    gstNumber: findHeaderIndex(
+      headers,
+      "gstNumber"
+    ),
+  };
+
+  const isStructured =
+    mapping.invoiceNumber !== -1 &&
+    mapping.contact !== -1 &&
+    mapping.amount !== -1;
+
+  if (!isStructured) {
+    return null;
+  }
+
+  return nonEmptyRows
+    .slice(1)
+    .map((row, index) => {
+      const getValue = (field) => {
+        const columnIndex = mapping[field];
+
+        if (
+          columnIndex === undefined ||
+          columnIndex === -1
+        ) {
+          return "-";
+        }
+
+        const value = row[columnIndex];
+
+        if (
+          value === undefined ||
+          value === null ||
+          String(value).trim() === ""
+        ) {
+          return "-";
+        }
+
+        return String(value).trim();
+      };
+
+      return {
+        sourceRow: index + 1,
+
+        invoiceNumber:
+          getValue("invoiceNumber"),
+
+        invoiceDate:
+          getValue("invoiceDate"),
+
+        dueDate:
+          getValue("dueDate"),
+
+        contact:
+          getValue("contact"),
+
+        currency:
+          getValue("currency"),
+
+        amount:
+          getValue("amount"),
+
+        tax:
+          getValue("tax"),
+
+        paidAmount:
+          getValue("paidAmount"),
+
+        paidDate:
+          getValue("paidDate"),
+
+        gstNumber:
+          getValue("gstNumber"),
+      };
+    });
+}
 /* -------------------------------------------------------
    CSV -> GEMINI READABLE TEXT
 ------------------------------------------------------- */
@@ -347,7 +496,7 @@ function worksheetToReadableText(worksheet) {
     )
     .join("\n");
 }
-
+  
 /* -------------------------------------------------------
    FILE EXTRACTION
 ------------------------------------------------------- */
@@ -380,49 +529,69 @@ async function extractFileContent(file) {
   /* CSV */
 
   if (extension === ".csv") {
-    const csvText = buffer.toString("utf8");
+    const csvText =
+      buffer.toString("utf8");
 
     return {
       format: "csv",
       rawText: csvText,
-      content: csvToReadableText(csvText),
+      content:
+        csvToReadableText(csvText),
     };
   }
 
   /* XLSX */
 
   if (extension === ".xlsx") {
-    const workbook = XLSX.read(
-      buffer,
-      {
+    const workbook =
+      XLSX.read(buffer, {
         type: "buffer",
         cellDates: true,
-      }
-    );
+      });
 
-    const sheets =
-      workbook.SheetNames
-        .map((sheetName) => {
-          const worksheet =
-            workbook.Sheets[sheetName];
+    const sheets = workbook.SheetNames
+      .map((sheetName) => {
+        const worksheet =
+          workbook.Sheets[sheetName];
 
-          const text =
-            worksheetToReadableText(
-              worksheet
-            );
+        const rows =
+          XLSX.utils.sheet_to_json(
+            worksheet,
+            {
+              header: 1,
+              defval: "",
+              raw: false,
+            }
+          );
 
-          if (!text.trim()) {
-            return "";
-          }
+        const text =
+          worksheetToReadableText(
+            worksheet
+          );
 
-          return `SHEET: ${sheetName}\n${text}`;
-        })
-        .filter(Boolean);
+        if (!text.trim()) {
+          return null;
+        }
+
+        return {
+          sheetName,
+          worksheet,
+          rows,
+          text,
+        };
+      })
+      .filter(Boolean);
 
     return {
       format: "xlsx",
       rawText: "",
-      content: sheets.join("\n\n"),
+      content: sheets
+        .map(
+          (sheet) =>
+            `SHEET: ${sheet.sheetName}\n${sheet.text}`
+        )
+        .join("\n\n"),
+      sheets,
     };
   }
 
@@ -437,16 +606,18 @@ async function extractFileContent(file) {
     return {
       format: "docx",
       rawText: "",
-      content: result.value || "",
+      content:
+        result.value || "",
     };
   }
 
   /* PDF */
 
   if (extension === ".pdf") {
-    const parser = new PDFParse({
-      data: buffer,
-    });
+    const parser =
+      new PDFParse({
+        data: buffer,
+      });
 
     try {
       const result =
@@ -455,7 +626,8 @@ async function extractFileContent(file) {
       return {
         format: "pdf",
         rawText: "",
-        content: result.text || "",
+        content:
+          result.text || "",
       };
     } finally {
       await parser.destroy();
@@ -1040,94 +1212,64 @@ async function saveInvoice({
 
 export async function POST(request) {
   try {
-    const userId =
-      getUserIdFromRequest(
-        request
-      );
+    const userId = getUserIdFromRequest(request);
 
-    const formData =
-      await request.formData();
-
-    const file =
-      formData.get("file");
+    const formData = await request.formData();
+    const file = formData.get("file");
 
     if (!file) {
       return NextResponse.json(
         {
           success: false,
-          message:
-            "No invoice file uploaded",
+          message: "No invoice file uploaded",
         },
-        {
-          status: 400,
-        }
+        { status: 400 }
       );
     }
 
-    if (
-      typeof file.arrayBuffer !==
-      "function"
-    ) {
+    if (typeof file.arrayBuffer !== "function") {
       return NextResponse.json(
         {
           success: false,
-          message:
-            "Invalid uploaded file",
+          message: "Invalid uploaded file",
         },
-        {
-          status: 400,
-        }
+        { status: 400 }
       );
     }
 
-    const extension =
-      file.name
-        .toLowerCase()
-        .slice(
-          file.name
-            .toLowerCase()
-            .lastIndexOf(".")
-        );
+    const extension = file.name
+      .toLowerCase()
+      .slice(
+        file.name.toLowerCase().lastIndexOf(".")
+      );
 
-    if (
-      !SUPPORTED_EXTENSIONS.includes(
-        extension
-      )
-    ) {
+    if (!SUPPORTED_EXTENSIONS.includes(extension)) {
       return NextResponse.json(
         {
           success: false,
           message:
             "Unsupported file type. Supported formats: .csv, .pdf, .xlsx, .docx",
         },
-        {
-          status: 400,
-        }
+        { status: 400 }
       );
     }
 
     /*
-     * STEP 1:
-     * Extract the uploaded file.
+     * STEP 1
+     * Extract uploaded file
      */
 
     const extracted =
-      await extractFileContent(
-        file
-      );
+      await extractFileContent(file);
 
-    if (
-      !extracted.content.trim()
-    ) {
+    if (!extracted.content.trim()) {
       return NextResponse.json(
         {
           success: false,
           message:
             "Could not extract readable invoice data from this file.",
         },
-        {
-          status: 400,
-        }
+        { status: 400 }
       );
     }
 
@@ -1136,17 +1278,18 @@ export async function POST(request) {
     );
 
     /*
-     * STEP 2:
-     * Decide whether CSV can be processed
-     * locally or needs Gemini.
+     * STEP 2
+     * Normalize invoice data
      */
 
     let normalizedInvoices = [];
     let aiUsed = false;
 
-    if (
-      extension === ".csv"
-    ) {
+    /*
+     * CSV
+     */
+
+    if (extension === ".csv") {
       const localInvoices =
         csvRowsToInvoices(
           extracted.rawText
@@ -1156,11 +1299,6 @@ export async function POST(request) {
         localInvoices &&
         localInvoices.length > 0
       ) {
-        /*
-         * CLEAN CSV
-         * No Gemini call.
-         */
-
         normalizedInvoices =
           localInvoices;
 
@@ -1168,11 +1306,6 @@ export async function POST(request) {
           `[Invoice] Structured CSV detected. Processing ${normalizedInvoices.length} rows locally.`
         );
       } else {
-        /*
-         * MESSY CSV
-         * Use Gemini.
-         */
-
         aiUsed = true;
 
         console.log(
@@ -1184,12 +1317,274 @@ export async function POST(request) {
             extracted.content
           );
       }
-    } else {
+    }
+
+    /*
+     * XLSX
+     */
+
+    else if (extension === ".xlsx") {
+      const buffer = Buffer.from(
+        await file.arrayBuffer()
+      );
+
+      const workbook = XLSX.read(
+        buffer,
+        {
+          type: "buffer",
+          cellDates: true,
+        }
+      );
+
+      const localInvoices = [];
+
+      for (
+        const sheetName of workbook.SheetNames
+      ) {
+        const worksheet =
+          workbook.Sheets[sheetName];
+
+        const rows =
+          XLSX.utils.sheet_to_json(
+            worksheet,
+            {
+              header: 1,
+              defval: "",
+              raw: false,
+            }
+          );
+
+        const nonEmptyRows =
+          rows.filter(
+            (row) =>
+              Array.isArray(row) &&
+              row.some(
+                (value) =>
+                  String(
+                    value ?? ""
+                  ).trim() !== ""
+              )
+          );
+
+        if (
+          nonEmptyRows.length <= 1
+        ) {
+          continue;
+        }
+
+        const headers =
+          nonEmptyRows[0].map(
+            normalizeHeader
+          );
+
+        const mapping = {
+          invoiceNumber:
+            findHeaderIndex(
+              headers,
+              "invoiceNumber"
+            ),
+
+          invoiceDate:
+            findHeaderIndex(
+              headers,
+              "invoiceDate"
+            ),
+
+          dueDate:
+            findHeaderIndex(
+              headers,
+              "dueDate"
+            ),
+
+          contact:
+            findHeaderIndex(
+              headers,
+              "contact"
+            ),
+
+          currency:
+            findHeaderIndex(
+              headers,
+              "currency"
+            ),
+
+          amount:
+            findHeaderIndex(
+              headers,
+              "amount"
+            ),
+
+          tax:
+            findHeaderIndex(
+              headers,
+              "tax"
+            ),
+
+          paidAmount:
+            findHeaderIndex(
+              headers,
+              "paidAmount"
+            ),
+
+          paidDate:
+            findHeaderIndex(
+              headers,
+              "paidDate"
+            ),
+
+          gstNumber:
+            findHeaderIndex(
+              headers,
+              "gstNumber"
+            ),
+        };
+
+        const isStructured =
+          mapping.invoiceNumber !== -1 &&
+          mapping.contact !== -1 &&
+          mapping.amount !== -1;
+
+        if (!isStructured) {
+          continue;
+        }
+
+        const sheetInvoices =
+          nonEmptyRows
+            .slice(1)
+            .map(
+              (row, index) => {
+                const getValue =
+                  (field) => {
+                    const columnIndex =
+                      mapping[field];
+
+                    if (
+                      columnIndex ===
+                        undefined ||
+                      columnIndex === -1
+                    ) {
+                      return "-";
+                    }
+
+                    const value =
+                      row[columnIndex];
+
+                    if (
+                      value ===
+                        undefined ||
+                      value === null ||
+                      String(
+                        value
+                      ).trim() === ""
+                    ) {
+                      return "-";
+                    }
+
+                    return String(
+                      value
+                    ).trim();
+                  };
+
+                return {
+                  sourceRow:
+                    index + 1,
+
+                  invoiceNumber:
+                    getValue(
+                      "invoiceNumber"
+                    ),
+
+                  invoiceDate:
+                    getValue(
+                      "invoiceDate"
+                    ),
+
+                  dueDate:
+                    getValue(
+                      "dueDate"
+                    ),
+
+                  contact:
+                    getValue(
+                      "contact"
+                    ),
+
+                  currency:
+                    getValue(
+                      "currency"
+                    ),
+
+                  amount:
+                    getValue(
+                      "amount"
+                    ),
+
+                  tax:
+                    getValue("tax"),
+
+                  paidAmount:
+                    getValue(
+                      "paidAmount"
+                    ),
+
+                  paidDate:
+                    getValue(
+                      "paidDate"
+                    ),
+
+                  gstNumber:
+                    getValue(
+                      "gstNumber"
+                    ),
+                };
+              }
+            );
+
+        localInvoices.push(
+          ...sheetInvoices
+        );
+      }
+
       /*
-       * PDF / XLSX / DOCX
-       * Use Gemini for normalization.
+       * Clean Excel file
+       * Process without Gemini
        */
 
+      if (
+        localInvoices.length > 0
+      ) {
+        normalizedInvoices =
+          localInvoices;
+
+        console.log(
+          `[Invoice] Structured XLSX detected. Processing ${normalizedInvoices.length} rows locally.`
+        );
+      }
+
+      /*
+       * Messy Excel file
+       * Use Gemini
+       */
+
+      else {
+        aiUsed = true;
+
+        console.log(
+          "[Invoice] Unrecognized XLSX structure. Sending to Gemini."
+        );
+
+        normalizedInvoices =
+          await normalizeInvoicesWithGemini(
+            extracted.content
+          );
+      }
+    }
+
+    /*
+     * PDF / DOCX
+     */
+
+    else {
       aiUsed = true;
 
       console.log(
@@ -1201,6 +1596,11 @@ export async function POST(request) {
           extracted.content
         );
     }
+
+    /*
+     * STEP 3
+     * Make sure invoices were found
+     */
 
     if (
       !Array.isArray(
@@ -1214,15 +1614,13 @@ export async function POST(request) {
           message:
             "No invoice records were found in the uploaded file.",
         },
-        {
-          status: 400,
-        }
+        { status: 400 }
       );
     }
 
     /*
-     * STEP 3:
-     * Get existing invoices.
+     * STEP 4
+     * Get existing invoices
      */
 
     const existingInvoices =
@@ -1234,10 +1632,8 @@ export async function POST(request) {
     let failedCount = 0;
 
     /*
-     * STEP 4:
-     * Process each invoice independently.
-     *
-     * One bad row NEVER stops the batch.
+     * STEP 5
+     * Process every invoice independently
      */
 
     for (
@@ -1277,8 +1673,8 @@ export async function POST(request) {
     }
 
     /*
-     * STEP 5:
-     * Return the user's latest invoices.
+     * STEP 6
+     * Return updated invoices
      */
 
     const updatedInvoices =
@@ -1289,7 +1685,8 @@ export async function POST(request) {
     return NextResponse.json({
       success: true,
 
-      message: `${extension.toUpperCase()} invoice batch processed successfully`,
+      message:
+        `${extension.toUpperCase()} invoice batch processed successfully`,
 
       summary: {
         total:
@@ -1304,7 +1701,8 @@ export async function POST(request) {
         aiUsed,
       },
 
-      data: updatedInvoices,
+      data:
+        updatedInvoices,
     });
   } catch (error) {
     console.error(
@@ -1320,9 +1718,7 @@ export async function POST(request) {
             ? error.message
             : "Invoice processing failed",
       },
-      {
-        status: 500,
-      }
+      { status: 500 }
     );
   }
 }
