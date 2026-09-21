@@ -1,21 +1,9 @@
 "use client";
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import {
-  AlertTriangle,
-  BarChart3,
-  CheckCircle2,
-  Clock3,
-  Eye,
-  FileText,
-  History,
-  MessageSquare,
-  LogOut,
-  UploadCloud,
-  User as UserIcon,
-  X,
-  XCircle,
-} from "lucide-react";
+import {AlertTriangle,BarChart3,CheckCircle2,Clock3,Eye,FileText,
+  History,MessageSquare,LogOut,UploadCloud,
+  User as UserIcon,X,XCircle,} from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
 import { useRouter } from "next/navigation";
 import HistoryDrawer from "@/components/HistoryDrawer";
@@ -38,6 +26,7 @@ type TimingStatus =
 interface InvoiceRecord {
   id: number | string;
   userId: string;
+  batchId?: string | null;
   invoiceNumber: string;
   invoiceDate: string;
   dueDate: string | null;
@@ -101,6 +90,7 @@ function normalizeInvoice(raw: any): InvoiceRecord {
   return {
     id: raw?.id,
     userId: String(raw?.userId ?? raw?.user_id ?? ""),
+    batchId: String(raw?.batchId ?? raw?.batch_id ?? null),
     invoiceNumber: String(raw?.invoiceNumber ?? raw?.invoice_number ?? ""),
     invoiceDate: String(raw?.invoiceDate ?? raw?.invoice_date ?? ""),
     dueDate: raw?.dueDate ?? raw?.due_date ?? null,
@@ -394,47 +384,112 @@ export default function DashboardPage() {
     !!user?.email &&
     ADMIN_EMAILS.includes(user.email.trim().toLowerCase());
 
-  const fetchInvoices = useCallback(async (userId: string) => {
+const fetchInvoices = useCallback(
+  async (userId: string) => {
+    const normalizedUserId =
+      userId.trim().toLowerCase();
+
+    const batchActiveKey =
+      `cleartax_current_batch_active_${normalizedUserId}`;
+
+    // -------------------------------------------------------
+    // IMPORTANT:
+    // If the user clicked "Upload Another Batch"
+    // and has not uploaded anything yet, keep dashboard empty
+    // even after refresh.
+    // -------------------------------------------------------
+
+    const currentBatchActive =
+      localStorage.getItem(batchActiveKey);
+
+    if (currentBatchActive !== "true") {
+      setInvoices([]);
+      setCurrentPage(1);
+      setIsLoadingInvoices(false);
+      return;
+    }
+
     setIsLoadingInvoices(true);
+
+    setInvoices([]);
+    setCurrentPage(1);
 
     try {
       const response = await fetch(
-        `/api/invoices?userId=${encodeURIComponent(userId)}`,
+        `/api/invoices?userId=${encodeURIComponent(
+          normalizedUserId
+        )}`,
         {
           headers: {
-            "x-user-id": userId,
+            "x-user-id": normalizedUserId,
           },
+          cache: "no-store",
         }
       );
 
-      const result = await response.json();
+      const result =
+        await response.json();
 
-      if (!response.ok || !result.success) {
+      if (
+        !response.ok ||
+        !result.success
+      ) {
         throw new Error(
-          result.message || "Failed to fetch invoices"
+          result.message ||
+            "Failed to fetch invoices"
         );
       }
 
-      setInvoices(
+      const currentBatchInvoices =
         Array.isArray(result.data)
-          ? result.data.map(normalizeInvoice)
-          : []
+          ? result.data
+              .map(normalizeInvoice)
+              .filter(
+                (invoice) =>
+                  String(invoice.userId)
+                    .trim()
+                    .toLowerCase() ===
+                  normalizedUserId
+              )
+          : [];
+
+      const allHistoryInvoices =
+        Array.isArray(result.history)
+          ? result.history
+              .map(normalizeInvoice)
+              .filter(
+                (invoice) =>
+                  String(invoice.userId)
+                    .trim()
+                    .toLowerCase() ===
+                  normalizedUserId
+              )
+          : [];
+
+      setInvoices(
+        currentBatchInvoices
       );
 
       setHistoryInvoices(
-        Array.isArray(result.data)
-          ? result.data.map(normalizeInvoice)
-          : []
+        allHistoryInvoices
       );
 
       setCurrentPage(1);
     } catch (error) {
-      console.error("Failed to fetch invoices:", error);
+      console.error(
+        "Failed to fetch invoices:",
+        error
+      );
+
       setInvoices([]);
+      setHistoryInvoices([]);
+      setCurrentPage(1);
     } finally {
       setIsLoadingInvoices(false);
     }
-  }, []);
+  },
+  []
+);
 
   useEffect(() => {
     try {
@@ -442,7 +497,8 @@ export default function DashboardPage() {
 
       if (stored) {
         const parsed = JSON.parse(stored);
-
+        console.log("DASHBOARD USER:", parsed);
+        console.log("DASHBOARD USER ID:", parsed?.id);
         if (parsed?.id) {
           setUser(parsed);
           fetchInvoices(parsed.id);
@@ -457,9 +513,18 @@ export default function DashboardPage() {
   }, [fetchInvoices, router]);
 
   const handleLogout = () => {
-    localStorage.removeItem("cleartax_user");
-    router.push("/login");
-  };
+  localStorage.removeItem("cleartax_user");
+
+  setUser(null);
+  setInvoices([]);
+  setHistoryInvoices([]);
+  setSelectedInvoice(null);
+  setCurrentPage(1);
+  setFile(null);
+  setProgress(0);
+
+  router.replace("/login");
+};
 
   const handleFeedbackSubmit = async (
     event: React.FormEvent<HTMLFormElement>
@@ -601,19 +666,19 @@ export default function DashboardPage() {
         );
       }
 
-      if (Array.isArray(result.data)) {
-        setInvoices(
-          result.data.map(normalizeInvoice)
-        );
+      if (user?.id) {
+  const normalizedUserId =
+    user.id.trim().toLowerCase();
 
-        setHistoryInvoices(
-          result.data.map(normalizeInvoice)
-        );
+  localStorage.setItem(
+    `cleartax_current_batch_active_${normalizedUserId}`,
+    "true"
+  );
+}
 
-        setCurrentPage(1);
-      }
+await fetchInvoices(user.id);
 
-      setProgress(100);
+setProgress(100);
     } catch (error) {
       console.error("Processing error:", error);
       setProgress(0);
@@ -978,7 +1043,7 @@ export default function DashboardPage() {
                         "var(--muted-foreground)",
                     }}
                   >
-                    Supported: .csv, .pdf, .xlsx, .docx
+                    Supported: .csv .xlsx 
                   </p>
 
                   <button
@@ -1035,7 +1100,7 @@ export default function DashboardPage() {
                         "var(--muted-foreground)",
                     }}
                   >
-                    Supported: .csv, .pdf, .xlsx, .docx
+                    Supported: .csv, .xlsx,
                   </p>
 
                   <p
@@ -1145,11 +1210,21 @@ export default function DashboardPage() {
                   type="button"
                   className="btn-primary"
                   onClick={() => {
-                    setFile(null);
-                    setProgress(0);
-                    setInvoices([]);
-                    setCurrentPage(1);
-                  }}
+                  if (user?.id) {
+                  const normalizedUserId =
+                  user.id.trim().toLowerCase();
+
+                  localStorage.setItem(
+                  `cleartax_current_batch_active_${normalizedUserId}`,
+                  "false"
+                 );
+                 }
+
+                setFile(null);
+                setProgress(0);
+                setInvoices([]);
+                setCurrentPage(1);
+                }}
                   style={{
                     padding: "0.65rem 1rem",
                     fontSize: "0.9rem",
