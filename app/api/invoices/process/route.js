@@ -190,12 +190,6 @@ function analyzeCSVStructure(csvText) {
     gstNumber: findHeaderIndex(headers, "gstNumber"),
   };
 
-  /*
-   * These are the minimum fields needed to understand
-   * that this is a normal invoice CSV.
-   *
-   * Other fields can be missing.
-   */
   const hasInvoiceNumber = mapping.invoiceNumber !== -1;
   const hasContact = mapping.contact !== -1;
   const hasAmount = mapping.amount !== -1;
@@ -289,16 +283,20 @@ function csvRowsToInvoices(csvText) {
 
   return invoices;
 }
-  /* -------------------------------------------------------
+
+/* -------------------------------------------------------
    CONVERT STRUCTURED XLSX SHEET TO INVOICE OBJECTS
 ------------------------------------------------------- */
 
 function worksheetToInvoices(worksheet) {
-  const rows = XLSX.utils.sheet_to_json(worksheet, {
-    header: 1,
-    defval: "",
-    raw: false,
-  });
+  const rows = XLSX.utils.sheet_to_json(
+    worksheet,
+    {
+      header: 1,
+      defval: "",
+      raw: false,
+    }
+  );
 
   const nonEmptyRows = rows.filter(
     (row) =>
@@ -439,6 +437,7 @@ function worksheetToInvoices(worksheet) {
       };
     });
 }
+
 /* -------------------------------------------------------
    CSV -> GEMINI READABLE TEXT
 ------------------------------------------------------- */
@@ -496,7 +495,7 @@ function worksheetToReadableText(worksheet) {
     )
     .join("\n");
 }
-  
+
 /* -------------------------------------------------------
    FILE EXTRACTION
 ------------------------------------------------------- */
@@ -987,6 +986,7 @@ async function saveInvoice({
   userId,
   invoice,
   existingInvoices,
+  batchId,
 }) {
   const normalized =
     normalizeAIInvoice(invoice);
@@ -1135,6 +1135,8 @@ async function saveInvoice({
     invoiceNumber:
       normalized.invoiceNumber,
 
+    batchId,
+
     invoiceDate:
       invoiceDateResult.valid
         ? invoiceDateResult.date
@@ -1212,38 +1214,67 @@ async function saveInvoice({
 
 export async function POST(request) {
   try {
-    const userId = getUserIdFromRequest(request);
+    const userId =
+      getUserIdFromRequest(request);
 
-    const formData = await request.formData();
-    const file = formData.get("file");
+    if (!userId) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "User ID is required",
+        },
+        { status: 400 }
+      );
+    }
+
+    // One unique batch ID for the entire upload
+    const batchId = crypto.randomUUID();
+
+    const formData =
+      await request.formData();
+
+    const file =
+      formData.get("file");
 
     if (!file) {
       return NextResponse.json(
         {
           success: false,
-          message: "No invoice file uploaded",
+          message:
+            "No invoice file uploaded",
         },
         { status: 400 }
       );
     }
 
-    if (typeof file.arrayBuffer !== "function") {
+    if (
+      typeof file.arrayBuffer !==
+      "function"
+    ) {
       return NextResponse.json(
         {
           success: false,
-          message: "Invalid uploaded file",
+          message:
+            "Invalid uploaded file",
         },
         { status: 400 }
       );
     }
 
-    const extension = file.name
-      .toLowerCase()
-      .slice(
-        file.name.toLowerCase().lastIndexOf(".")
-      );
+    const extension =
+      file.name
+        .toLowerCase()
+        .slice(
+          file.name
+            .toLowerCase()
+            .lastIndexOf(".")
+        );
 
-    if (!SUPPORTED_EXTENSIONS.includes(extension)) {
+    if (
+      !SUPPORTED_EXTENSIONS.includes(
+        extension
+      )
+    ) {
       return NextResponse.json(
         {
           success: false,
@@ -1520,7 +1551,9 @@ export async function POST(request) {
                     ),
 
                   tax:
-                    getValue("tax"),
+                    getValue(
+                      "tax"
+                    ),
 
                   paidAmount:
                     getValue(
@@ -1650,6 +1683,7 @@ export async function POST(request) {
             userId,
             invoice,
             existingInvoices,
+            batchId,
           });
 
         if (
@@ -1674,12 +1708,19 @@ export async function POST(request) {
 
     /*
      * STEP 6
-     * Return updated invoices
+     * Return ONLY the current batch
      */
 
     const updatedInvoices =
       await getUserInvoices(
         userId
+      );
+
+    const currentBatchInvoices =
+      updatedInvoices.filter(
+        (invoice) =>
+          invoice.batchId ===
+          batchId
       );
 
     return NextResponse.json({
@@ -1701,8 +1742,13 @@ export async function POST(request) {
         aiUsed,
       },
 
+      // IMPORTANT:
+      // Only return the current upload
+      // to the dashboard.
       data:
-        updatedInvoices,
+        currentBatchInvoices,
+
+      batchId,
     });
   } catch (error) {
     console.error(
@@ -1718,7 +1764,9 @@ export async function POST(request) {
             ? error.message
             : "Invoice processing failed",
       },
-      { status: 500 }
+      {
+        status: 500,
+      }
     );
   }
 }
@@ -1765,7 +1813,8 @@ export async function GET(
       success: true,
 
       progress: {
-        total: invoices.length,
+        total:
+          invoices.length,
 
         processed,
 

@@ -41,7 +41,7 @@ export default function LoginPage() {
 
       localStorage.setItem("cleartax_user", JSON.stringify(data.user));
 
-      router.push("/dashboard");
+      window.location.href = "/dashboard";
     } catch (err: unknown) {
       if (err instanceof Error) {
         setErrorMessage(err.message);
